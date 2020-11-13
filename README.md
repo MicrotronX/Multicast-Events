@@ -9,60 +9,15 @@ The creator of this unit cannot be made responsible for any damage you've made b
 
 Example-Usage in a tDataset descant:
 
-unit myMulticastEventDatasetUnit;
-interface
-uses System.Classes, Data.DB, mxEventsUnit;
-
-type
-	tmyMulticastEventDataset=class(tDataset)
-	private
-		function fmxevents_get:tmxevents;
-	public
-		fmxEvents:TmxEvents;
-		constructor Create(AOwner:TComponent); override;
-		destructor Destroy; override;
-	published
-		property mxEvents:TmxEvents read fmxevents_get;
+var
+	vE:tmxEvents;
+begin
+	ve:=mxEvents_Connect2Dataset(myMemDataset1);
+	if assigned(ve) then begin
+		// add new AfterScroll Event to Eventslist
+		vE.Event('AfterScroll').AddDatasetNotifyEvent(self, 'uniqueidentforthisevent', myAfterScrollEvent);
+		
+		// disable Event
+		vE.Event('AfterScroll').Disable(self, 'uniqueidentforthisevent');
 	end;
-
-implementation
-
-constructor tmyMulticastEventDataset.Create(AOwner: TComponent);
-begin
-	inherited;
-	fmxEvents:=nil;
 end;
-
-destructor tmyMulticastEventDataset.Destroy;
-begin
-	if assigned(fmxEvents) then fmxEvents.free;
-	fmxEvents:=nil;
-	inherited;
-end;
-
-function tmyMulticastEventDataset.fmxevents_get: tmxevents;
-begin
-	// we Create the tmxEvents only if there is a need
-	if not assigned(fmxevents) then begin
-		fmxEvents:=tmxEvents.create(self);
-	end;
-	result:=fmxevents;
-end;
-
-end.
-
-<< If someone knows a way to inject this into tDataset itself, you're free to change the code! >>
-
-Declarations for Examples:
-  myDS:tmyMulticastEventDataset;
-  procedure FirstAfterScrollEvent(vDataset:tDataset); 
-  procedure SecondAfterScrollEvent(vDataset:tDataset); 
-  
-Example-Usage for registering a AfterScroll Event:
-  myDS.mxEvents.Event('AfterScroll').AddDatasetNotifyEvent('uniquenameforevent1',  FirstAfterScrollEvent) ;
-  myDS.mxEvents.Event('AfterScroll').AddDatasetNotifyEvent('uniquenameforevent2',  SecondAfterScrollEvent) ;
-
-Example-usage for disabling a already registered AfterScroll Event:
-  myMCDS1.mxEvents.Event('AfterScroll').Disable('uniquenameforevent1') ;
-  myMCDS1.mxEvents.Event('AfterScroll').Disable('uniquenameforevent2') ;
-
