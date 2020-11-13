@@ -9,6 +9,7 @@ type
 		vActive:boolean;
 		vType:integer; // 0=Notify, 1=DatasetNotify
 		vIdent:string;
+		vSender:tObject;
 		vMethod:tmethod;
 	end;
 	tmxEventMethodArray = array of tmxEventMethod;
@@ -23,15 +24,15 @@ type
 
 		OriginalMethod: TMethod;
 		ScriptMethod: tmxEventMethodArray;
-		function  addorgetScriptMethod(vIdent:string):integer;
+		function  addorgetScriptMethod(vSender:tObject; vIdent:string):integer;
 	public
 		procedure Init(const vSender: TComponent; const Event: string);
 
-		procedure Add(const vIdent:string; const vtype:integer; const PMethod: tMethod);
-		procedure AddNotifyEvent(const vIdent:string; vNotifyEvent:tNotifyEvent);
-		procedure AddDatasetNotifyEvent(const vIdent:string; vNotifyEvent: TDataSetNotifyEvent);
+		procedure Add(vSender:tObject; const vIdent:string; const vtype:integer; const PMethod: tMethod);
+		procedure AddNotifyEvent(vSender:tObject; const vIdent:string; vNotifyEvent:tNotifyEvent);
+		procedure AddDatasetNotifyEvent(vSender:tObject; const vIdent:string; vNotifyEvent: TDataSetNotifyEvent);
 
-		procedure Disable(const vIdent:string);
+		procedure Disable(vSender:tObject; const vIdent:string);
 
 		constructor Create;
 		destructor Destroy; override;
@@ -55,12 +56,30 @@ type
 		destructor Destroy; override;
 	end;
 
+	function mxEvents_Connect2Dataset(vDataset:tdataset):tmxEvents;
+
+	var mxEvents_Global_Datasets:tDictionary<tDataset, tmxEvents>;
+
 implementation
 
 const fMonitorTimeout=10000;
+
+// Global function which can be used in units to connect an tmxEvents to a dataset or return a connected tmxEvents for a tDataset
+// i.e. vE:=mxEvents_Connect2Dataset(mymemtable1);
+//      vE.Event('AfterScroll').AddDatasetNotifyEvent(self, 'uniqueid1',  myadditionalafterscrollevent ) ;
+//      vE.Event('AfterPost').Disable(self, 'uniqueid1' );		
+function mxEvents_Connect2Dataset(vDataset:tdataset):tmxEvents;
+begin
+	mxEvents_Global_Datasets.TryGetValue(vdataset, result);
+	if not assigned(result) then begin
+		result:=tmxEvents.create(vdataset);
+		mxEvents_Global_Datasets.Add(vdataset, result);
+	end;
+end;
+
 {
 	tmxEvents
-	Liste von möglichen Events wie AfterScroll, AfterOpen
+	Liste von mÃ¶glichen Events wie AfterScroll, AfterOpen
 }
 constructor tmxEvents.create(const vOwnerComponent: tComponent);
 begin
@@ -171,9 +190,9 @@ begin
 	setlength(ScriptMethod,0);
 	inherited;
 end;
-procedure TmxEventHandler.Disable(const vIdent: string);
+procedure TmxEventHandler.Disable(vSender:tObject; const vIdent: string);
 begin
-	ScriptMethod[addorgetScriptMethod(vIdent)].vActive:=false;
+	ScriptMethod[addorgetScriptMethod(vSender, vIdent)].vActive:=false;
 end;
 
 procedure TmxEventHandler.Init(const vSender: TComponent; const Event: string);
@@ -190,7 +209,7 @@ begin
 
 	SetMethodProp(vSender, Event, fEvent);
 end;
-function tmxEventHandler.addorgetScriptMethod(vIdent:string):integer;
+function tmxEventHandler.addorgetScriptMethod(vSender:tobject; vIdent:string):integer;
 var
 	vnewindex, i:integer;
 	vfound:boolean;
@@ -202,10 +221,13 @@ begin
 		fInternalWorking:=true;
 		for i:=0 to length(ScriptMethod)-1 do begin
 			if scriptmethod[i].vActive then begin
-				if ansisametext(scriptmethod[i].vident, vident) then begin
-					result:=i;
-					vfound:=true;
-					break;
+				if assigned(scriptmethod[i].vSender) then begin
+					if scriptmethod[i].vsender=vSender then
+					if ansisametext(scriptmethod[i].vident, vident) then begin
+						result:=i;
+						vfound:=true;
+						break;
+					end;
 				end;
 			end;
 		end;
@@ -226,6 +248,7 @@ begin
 
 			scriptmethod[vnewindex].vActive:=true;
 			scriptmethod[vnewindex].vident:=vIdent;
+			scriptmethod[vnewindex].vSender:=vSender;
 			scriptmethod[vnewindex].vMethod.Data:=self;
 			scriptmethod[vnewindex].vMethod.Code:=0;
 			result:=vnewindex;
@@ -235,28 +258,29 @@ begin
 	end;
 end;
 
-procedure TmxEventHandler.Add(const vIdent:string; const vtype:integer; const PMethod: tMethod);
+procedure TmxEventHandler.Add(vSender:tObject; const vIdent:string; const vtype:integer; const PMethod: tMethod);
 var
 	vindex:integer;
 begin
-	vindex:=addorgetScriptMethod(vIdent);
+	vindex:=addorgetScriptMethod(vSender, vIdent);
 	scriptmethod[vindex].vType:=vtype;
+	scriptmethod[vindex].vSender:=vSender;
 	scriptmethod[vindex].vMethod.Code:=pMethod.Code;
 	scriptmethod[vindex].vMethod.Data:=pMethod.Data;
 end;
-procedure TmxEventHandler.AddNotifyEvent(const vIdent:string; vNotifyEvent: tNotifyEvent);
+procedure TmxEventHandler.AddNotifyEvent(vSender:tObject; const vIdent:string; vNotifyEvent: tNotifyEvent);
 var
 	vMethod:tMethod;
 begin
 	vMethod:=tMethod(vNotifyEvent);
-	Add(vIdent, 0, vMethod);
+	Add(vSender, vIdent, 0, vMethod);
 end;
-procedure TmxEventHandler.AddDatasetNotifyEvent(const vIdent:string; vNotifyEvent: tDatasetNotifyEvent);
+procedure TmxEventHandler.AddDatasetNotifyEvent(vSender:tObject; const vIdent:string; vNotifyEvent: tDatasetNotifyEvent);
 var
 	vMethod:tMethod;
 begin
 	vMethod:=tMethod(vNotifyEvent);
-	Add(vIdent, 1, vMethod);
+	Add(vSender, vIdent, 1, vMethod);
 end;
 procedure TmxEventHandler.StartEventHandler(Sender: TObject);
 var
@@ -270,6 +294,9 @@ begin
 		if scriptmethod[i].vActive then begin
 
 			if not assigned(TNotifyEvent(ScriptMethod[i].vMethod)) then continue;
+			if not assigned(ScriptMethod[i].vSender) then continue;
+			if csDestroying in tComponent(ScriptMethod[i].vSender).ComponentState then continue;
+			if csDestroying in tComponent(ScriptMethod[i].vMethod.Data).ComponentState then continue;
 
 			if scriptmethod[i].vType=0 then TNotifyEvent(ScriptMethod[i].vMethod)(Sender) else
 			if scriptmethod[i].vType=1 then tDatasetNotifyEvent(ScriptMethod[i].vMethod)(tDataset(Sender)) else
@@ -279,5 +306,31 @@ begin
 	end;
 end;
 
-end.
 
+var
+	mxegdc_i:integer;
+
+Initialization
+	mxEvents_Global_Datasets:=tDictionary<tDataset, tmxEvents>.Create();
+
+finalization
+
+	if assigned(mxEvents_Global_Datasets) then begin
+		try
+			for mxegdc_i:=0 to mxEvents_Global_Datasets.Count-1 do begin
+				try
+					if assigned(mxEvents_Global_Datasets.ToArray[mxegdc_i].Value) then begin
+						mxEvents_Global_Datasets.ToArray[mxegdc_i].Value.free;
+						mxEvents_Global_Datasets.ToArray[mxegdc_i].Value:=nil;
+					end;
+				except
+                end;
+			end;
+		except
+		end;
+
+		freeandnil(mxEvents_Global_Datasets);
+	end;
+
+
+end.
