@@ -9,6 +9,7 @@ The creator of this unit cannot be made responsible for any damage you've made b
 
 Example-Usage in a tDataset descant:
 
+```
 var
 	vE:tmxEvents;
 begin
@@ -21,3 +22,4 @@ begin
 		vE.Event('AfterScroll').Disable(self, 'uniqueidentforthisevent');
 	end;
 end;
+```
